@@ -22,12 +22,26 @@ steps:
   inputs:
     packageType: 'sdk'
     version: '8.x'
+- script: dotnet tool install --global dotnet-reportgenerator-cli
+  displayName: 'Install ReportGenerator Tool'
+
+- script: dotnet restore
+  displayName: 'Restore dependencies'
+
+- script: dotnet build --configuration Release
+  displayName: 'Build solution'
+
+- script: dotnet test --collect:"XPlat Code Coverage"
+  displayName: 'Run tests with code coverage'
+
+- script: dotnet reportgenerator -reports:$(Build.SourcesDirectory)/**/coverage.cobertura.xml -targetdir:$(Build.SourcesDirectory)/CodeCoverage -reporttypes:HtmlInline_AzurePipelines
+  displayName: 'Generate Code Coverage Report'
 
 - task: NodeTool@0
   displayName: 'Install Node.js'
   inputs:
     versionSpec: '16.x'
-    
+
 - task: Npm@1
   displayName: 'Run npm install'
   inputs:
