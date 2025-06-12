@@ -22,7 +22,8 @@ steps:
   inputs:
     packageType: 'sdk'
     version: '8.x'
-- script: dotnet tool install --global dotnet-reportgenerator-cli
+- script: |
+    dotnet tool install --global dotnet-reportgenerator-cli --add-source https://api.nuget.org/v3/index.json
   displayName: 'Install ReportGenerator Tool'
 
 - script: dotnet restore
