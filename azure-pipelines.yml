@@ -4,7 +4,7 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
   demands:
-  - npm
+    - npm
 
 variables:
   buildConfiguration: 'Release'
@@ -12,58 +12,75 @@ variables:
   dotnetSdkVersion: '6.x'
 
 steps:
+# Use .NET 6 SDK for compatibility
 - task: UseDotNet@2
   displayName: 'Use .NET SDK $(dotnetSdkVersion)'
   inputs:
     version: '$(dotnetSdkVersion)'
 
+# Also install .NET 8 SDK for test/coverage steps
 - task: UseDotNet@2
-  displayName: 'installing .NET 8.x'
+  displayName: 'Install .NET 8 SDK'
   inputs:
     packageType: 'sdk'
     version: '8.x'
-- script: |
-    dotnet tool install --global dotnet-reportgenerator-cli --add-source https://api.nuget.org/v3/index.json
-  displayName: 'Install ReportGenerator Tool'
 
+# Restore dependencies
 - script: dotnet restore
   displayName: 'Restore dependencies'
 
-- script: dotnet build --configuration Release
+# Build solution
+- script: dotnet build --configuration $(buildConfiguration)
   displayName: 'Build solution'
 
-- script: dotnet test --collect:"XPlat Code Coverage"
+# Run tests and collect code coverage
+- script: dotnet test --configuration $(buildConfiguration) --collect:"XPlat Code Coverage"
   displayName: 'Run tests with code coverage'
 
-- script: dotnet reportgenerator -reports:$(Build.SourcesDirectory)/**/coverage.cobertura.xml -targetdir:$(Build.SourcesDirectory)/CodeCoverage -reporttypes:HtmlInline_AzurePipelines
-  displayName: 'Generate Code Coverage Report'
+# Install and run ReportGenerator using local tool manifest
+- script: |
+    cd $(Build.SourcesDirectory)
+    dotnet new tool-manifest
+    dotnet tool install dotnet-reportgenerator-cli
+    dotnet tool run reportgenerator \
+      -reports:$(Build.SourcesDirectory)/**/coverage.cobertura.xml \
+      -targetdir:$(Build.SourcesDirectory)/CodeCoverage \
+      -reporttypes:HtmlInline_AzurePipelines
+  displayName: 'Generate code coverage report'
 
+# Install Node.js
 - task: NodeTool@0
   displayName: 'Install Node.js'
   inputs:
     versionSpec: '16.x'
 
+# Run npm install
 - task: Npm@1
   displayName: 'Run npm install'
   inputs:
     verbose: true
 
+# Compile Sass assets
 - script: './node_modules/.bin/node-sass $(wwwrootDir) --output $(wwwrootDir)'
   displayName: 'Compile Sass assets'
 
+# Run gulp tasks
 - task: gulp@1
   displayName: 'Run gulp tasks'
 
+# Write build info to file
 - script: 'echo "$(Build.DefinitionName), $(Build.BuildId), $(Build.BuildNumber)" > buildinfo.txt'
   displayName: 'Write build info'
   workingDirectory: $(wwwrootDir)
 
+# Restore NuGet packages via CLI
 - task: DotNetCoreCLI@2
   displayName: 'Restore project dependencies'
   inputs:
     command: 'restore'
     projects: '**/*.csproj'
 
+# Build project
 - task: DotNetCoreCLI@2
   displayName: 'Build the project - $(buildConfiguration)'
   inputs:
@@ -71,13 +88,15 @@ steps:
     arguments: '--no-restore --configuration $(buildConfiguration)'
     projects: '**/*.csproj'
 
+# Restore .NET tools from local manifest
 - task: DotNetCoreCLI@2
-  displayName: 'Install .NET tools from local manifest'
+  displayName: 'Restore .NET tools from manifest'
   inputs:
-    command: custom
-    custom: tool
+    command: 'custom'
+    custom: 'tool'
     arguments: 'restore'
 
+# Run unit tests and collect coverage for publish step
 - task: DotNetCoreCLI@2
   displayName: 'Run unit tests - $(buildConfiguration)'
   inputs:
@@ -86,19 +105,14 @@ steps:
     publishTestResults: true
     projects: '**/*.Tests.csproj'
 
-- task: DotNetCoreCLI@2
-  displayName: 'Create code coverage report'
-  inputs:
-    command: custom
-    custom: tool
-    arguments: 'run reportgenerator -reports:$(Build.SourcesDirectory)/**/coverage.cobertura.xml -targetdir:$(Build.SourcesDirectory)/CodeCoverage -reporttypes:HtmlInline_AzurePipelines'
-
+# Publish coverage results to Azure DevOps UI
 - task: PublishCodeCoverageResults@1
   displayName: 'Publish code coverage report'
   inputs:
     codeCoverageTool: 'cobertura'
     summaryFileLocation: '$(Build.SourcesDirectory)/**/coverage.cobertura.xml'
 
+# Publish the application
 - task: DotNetCoreCLI@2
   displayName: 'Publish the project - $(buildConfiguration)'
   inputs:
@@ -108,6 +122,7 @@ steps:
     arguments: '--no-build --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/$(buildConfiguration)'
     zipAfterPublish: true
 
+# Publish build artifact
 - task: PublishBuildArtifacts@1
   displayName: 'Publish Artifact: drop'
   condition: succeeded()
