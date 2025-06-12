@@ -23,6 +23,11 @@ steps:
     packageType: 'sdk'
     version: '8.x'
 
+- task: NodeTool@0
+  displayName: 'Install Node.js'
+  inputs:
+    versionSpec: '16.x'
+    
 - task: Npm@1
   displayName: 'Run npm install'
   inputs:
